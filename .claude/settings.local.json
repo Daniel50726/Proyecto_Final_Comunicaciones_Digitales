@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python run_receptor.py --source sim --angle 15 --debug save)"
+    ]
+  }
+}
