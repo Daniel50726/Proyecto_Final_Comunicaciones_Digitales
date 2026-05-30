@@ -19,7 +19,10 @@
       "Bash(python run_receptor.py --source sim --text \"Reed-Solomon protege contra errores de rafaga en el canal optico pantalla-camara del modem PDS\" --ecc rs --nsym 32 --angle 15 --noise 38 --brightness 0.7 --debug none)",
       "Bash(python run_receptor.py --source sim --text \"Modem optico PDS 2026 Fase B\" --ecc none --angle 10 --occlude 0.12 --debug none)",
       "Bash(python benchmark_b5.py)",
-      "Bash(python run_camera.py --source sim --text \"Hola PDS|Modem optico|Fase B video|listo\" --spc 3 --noise 4 --debug save)"
+      "Bash(python run_camera.py --source sim --text \"Hola PDS|Modem optico|Fase B video|listo\" --spc 3 --noise 4 --debug save)",
+      "Bash(python run_receptor.py --source image --path captura.png --debug save)",
+      "Bash(python generate_frame.py --text \"Hola Mundo! PDS 2026\" --ecc rs --nsym 16 --out frame_rs.png)",
+      "Bash(python run_receptor.py --source sim --path frame_rs.png --ecc rs --nsym 16 --angle 15 --noise 8 --brightness 0.7 --debug none)"
     ]
   }
 }

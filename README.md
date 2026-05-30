@@ -15,6 +15,7 @@ grilla de macropíxeles en escala de grises.
 |------|-----------|
 | `FaseA.ipynb` | **Fase A — transmisor** (notebook). Modulación BPSK-Manchester / 4-ASK, marcadores tipo QR, pilotos, preámbulo Gold, ensamblado de trama. |
 | `receptor/` | **Fase B — receptor** (paquete `.py`). Pipeline modular B1–B4 + modo vídeo. Ver [`receptor/README.md`](receptor/README.md). |
+| `generate_frame.py` | Transmisor: genera una trama PNG (con/sin ECC) para mostrar y fotografiar. |
 | `run_receptor.py` | Receptor de cuadro único (CLI). |
 | `benchmark_b5.py` | Evaluación cuantitativa de BER (ablación de correcciones). |
 | `run_camera.py` | Modo vídeo en vivo (cámara o stream simulado). |
@@ -27,11 +28,12 @@ grilla de macropíxeles en escala de grises.
 ```bash
 python -m pip install numpy opencv-python matplotlib
 
-# decodificar la trama de ejemplo a 15°
-python run_receptor.py --source sim --angle 15 --debug window
+# decodificar la trama de ejemplo (Fase A, sin ECC) a 15°
+python run_receptor.py --source sim --angle 15 --ecc none --debug window
 
-# end-to-end con texto + Reed-Solomon
-python run_receptor.py --source sim --text "Hola PDS 2026" --ecc rs --angle 20
+# generar una trama propia con Reed-Solomon para mostrar y fotografiar
+python generate_frame.py --text "Hola Mundo! PDS 2026" --ecc rs --nsym 16 --out frame_rs.png
+python run_receptor.py --source image --path foto.png --ecc rs --nsym 16
 ```
 
 La documentación completa de la arquitectura, etapas, ECC y comandos del

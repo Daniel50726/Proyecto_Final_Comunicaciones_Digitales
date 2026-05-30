@@ -109,7 +109,7 @@ python run_receptor.py --source sim --text "Modem optico Fase B" --ecc rs --angl
 #   (compárese con --ecc none → texto corrupto)
 
 # Foto real de la cámara
-python run_receptor.py --source image --path captura.png --debug window
+python run_receptor.py --source image --path captura2.png --ecc none --debug window
 ```
 
 Opciones de canal (sim): `--angle --noise --brightness --blur --ambient

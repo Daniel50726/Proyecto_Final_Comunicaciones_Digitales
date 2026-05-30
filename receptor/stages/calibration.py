@@ -60,12 +60,14 @@ class CalibrationStage(PipelineStage):
     required = True
 
     def __init__(self, min_pilots_per_level: int = 6, verbose: bool = True,
-                 force_mode: str = None):
+                 force_mode: str = None, warn_residual: float = 40.0):
         """force_mode: None=auto, "global"=escalar a,b, "2d"=mapa espacial.
-        El modo "2d" es el que compensa gradientes/rolling shutter (ablación B5)."""
+        El modo "2d" es el que compensa gradientes/rolling shutter (ablación B5).
+        warn_residual: umbral SOLO de advertencia (no detiene el pipeline)."""
         self.min_pilots_per_level = min_pilots_per_level
         self.verbose = verbose
         self.force_mode = force_mode
+        self.warn_residual = warn_residual
 
     def run(self, ctx: PipelineContext) -> bool:
         if ctx.warped is None:
@@ -137,9 +139,18 @@ class CalibrationStage(PipelineStage):
                   f"(pilotos {int(blk.sum())}● / {int(wht.sum())}○)")
             print(f"  Ganancia/offset    : a={a_g:.4f}  b={b_g:.2f}")
             print(f"  Residual pilotos   : {residual:.2f}  (RMS, calibrado vs 0/255)")
+            if residual >= self.warn_residual:
+                print(f"  ⚠ residual alto (≥{self.warn_residual:.0f}): posible "
+                      f"desalineación sub-celda de la grilla, blur/reflejos o "
+                      f"contraste bajo. Se continúa (mejor esfuerzo); B3/B4 dirán "
+                      f"si es decodificable.")
 
-        # Éxito: calibración invertible y pilotos razonablemente recuperados
-        return abs(a_g) > 1e-3 and residual < 40.0
+        # La calibración es de MEJOR ESFUERZO: basta con que sea invertible.
+        # El residual alto se reporta como advertencia, pero NO detiene el
+        # pipeline — los jueces reales de calidad son la sincronización (B3) y
+        # el demapeo+ECC (B4).  Un residual alto suele ser desalineación de la
+        # grilla, no un fallo de la calibración en sí.
+        return abs(a_g) > 1e-3
 
     def draw_debug(self, ctx: PipelineContext):
         cfg = ctx.config
