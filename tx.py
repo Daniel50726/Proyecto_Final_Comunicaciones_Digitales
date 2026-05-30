@@ -26,6 +26,7 @@
 #    python tx.py --file mensaje.txt --monitor 1
 # ─────────────────────────────────────────────────────────────
 import argparse
+import os
 import sys
 import time
 
@@ -58,9 +59,10 @@ def letterbox_black(frame_gray, screen_w, screen_h):
 
 def main():
     ap = argparse.ArgumentParser(description="Transmisor óptico en tiempo real")
-    src = ap.add_mutually_exclusive_group(required=True)
+    src = ap.add_mutually_exclusive_group(required=False)
     src.add_argument("--text", help="mensaje a transmitir")
-    src.add_argument("--file", help="archivo de texto a transmitir")
+    src.add_argument("--file", default="mensaje.txt",
+                     help="archivo de texto a transmitir (def: mensaje.txt)")
     ap.add_argument("--scheme", choices=["BPSK_Manchester", "4ASK"],
                     default="BPSK_Manchester")
     ap.add_argument("--nsym", type=int, default=16, help="paridad RS por cuadro")
@@ -72,7 +74,15 @@ def main():
                     help="nº de repeticiones de la secuencia (0 = infinito)")
     args = ap.parse_args()
 
-    text = args.text if args.text else open(args.file, encoding="utf-8").read()
+    if args.text is not None:
+        text = args.text
+    else:
+        if not os.path.isfile(args.file):
+            sys.exit(f"✗ No existe el archivo de mensaje: {args.file}\n"
+                     f"  Crea '{args.file}' con el texto a transmitir, o usa --text.")
+        text = open(args.file, encoding="utf-8").read().strip()
+    if not text:
+        sys.exit("✗ El mensaje está vacío.")
     config = ModemConfig(scheme=args.scheme)
     ecc = ECCConfig(scheme="rs", nsym=args.nsym)
 

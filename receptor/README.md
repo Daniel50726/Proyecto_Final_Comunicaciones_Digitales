@@ -136,6 +136,64 @@ muestra el periodo estimado real; ajusta `--spc` si difiere.
 
 ---
 
+## Fase C — Transmisión multi-cuadro en tiempo real (`tx.py` / `rx.py`)
+
+Para mensajes que no caben en un cuadro (hasta 500+ caracteres) se transmite una
+**secuencia de cuadros** en tiempo real, con un protocolo de trama
+(`receptor/protocol.py`): `[SYNC, DATA₀ … DATAₙ₋₁, EOM]`. Cada cuadro lleva, bajo
+Reed-Solomon, una cabecera con `tipo / nº de secuencia / total / longitud`. El
+receptor **acepta solo cuadros cuyo RS decodifica sin fallos** (descarta los
+desgarrados por rolling shutter o borrosos) y reensambla por nº de secuencia
+hasta tener todos los trozos o ver EOM.
+
+### Flujo de uso (mensaje en `mensaje.txt`)
+
+1. **Edita `mensaje.txt`** (en la raíz del proyecto) con el texto a transmitir.
+2. **Máquina-pantalla** (transmisor): muestra la secuencia a pantalla completa.
+   ```bash
+   python tx.py                 # lee mensaje.txt por defecto
+   # equivalente: python tx.py --file mensaje.txt --hold-ms 160 --nsym 16
+   ```
+3. **Máquina-cámara** (receptor): captura continua y reensambla.
+   ```bash
+   python rx.py --cam-id 0      # usa mensaje.txt como referencia de BER
+   ```
+4. Al completarse, el receptor imprime las **métricas de la rúbrica**:
+   ```
+   ── Métricas (rúbrica Fase C) ──
+     Tiempo de transmisión :   4.20 s    ✓ < 10 s
+     Coincidencia exacta   : ✓ SÍ  (0 caracteres distintos)
+     BER                   : 0.00e+00    ✓ < 1e-4
+   ```
+
+> El BER se mide automáticamente contra `--expect-file` (def `mensaje.txt`, el
+> mismo que envía el TX). Para otro texto: `--expect "…"` o `--expect-file otro.txt`.
+
+### Reglas y ajustes
+
+- **`--scheme` y `--nsym` deben coincidir** en `tx.py` y `rx.py` (los defaults ya
+  coinciden: BPSK_Manchester, nsym=16).
+- `--hold-ms` (TX, def 160): ms que cada cuadro permanece en pantalla. Súbelo si
+  el receptor rechaza muchos cuadros.
+- `rx.py --diag`: muestra la grilla rectificada y el **pico de correlación Gold**
+  por cuadro (1.0 = grilla perfecta) — útil para depurar alineación vs ruido.
+- `rx.py --calib 2d`: calibración espacial (más robusta a gradientes, ~10 fps);
+  `global` (def) va a ~19 fps.
+- `rx.py --backend dshow|msmf|any`: backend de cámara (apertura con fallback
+  automático; en Windows MSMF a veces no expone exposición/foco/WB → se compensa
+  por software).
+
+### Componentes críticos (Fase C)
+
+| Archivo | Rol |
+|---------|-----|
+| `tx.py` | Ventana fullscreen, fondo negro, cicla la secuencia de cuadros. |
+| `rx.py` | Captura continua + reensamblado + métricas (tiempo, BER). |
+| `receptor/protocol.py` | Protocolo de trama (SYNC/DATA/EOM, seq, reensamblado). |
+| `receptor/camera.py` | `CameraStream` (hilo, solo último cuadro → sin latencia) + `configure_camera` (desactiva automáticos, mejor esfuerzo). |
+
+---
+
 ## API mínima
 
 ```python

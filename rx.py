@@ -23,6 +23,7 @@
 #    python rx.py --cam-id 0 --expect "texto esperado para medir BER"
 # ─────────────────────────────────────────────────────────────
 import argparse
+import os
 import sys
 import time
 
@@ -94,7 +95,10 @@ def main():
     ap.add_argument("--no-config", action="store_true",
                     help="no tocar los ajustes automáticos de la cámara")
     ap.add_argument("--expect", default=None,
-                    help="texto esperado (mide BER y verifica al completar)")
+                    help="texto esperado (mide BER); prioritario sobre --expect-file")
+    ap.add_argument("--expect-file", default="mensaje.txt",
+                    help="archivo con el texto esperado para medir BER "
+                         "(def: mensaje.txt, el mismo que envía el TX)")
     ap.add_argument("--timeout", type=float, default=60.0,
                     help="segundos máx. esperando completar el mensaje")
     ap.add_argument("--show", action="store_true", default=True)
@@ -103,6 +107,13 @@ def main():
                          "pico de correlación Gold por cuadro (para depurar por "
                          "qué no se acepta ningún cuadro)")
     args = ap.parse_args()
+
+    # Texto esperado para medir BER: --expect directo, o el archivo --expect-file
+    # (mismo mensaje.txt que envía el TX) → BER automático sin pegar el texto.
+    if args.expect is None and args.expect_file and os.path.isfile(args.expect_file):
+        args.expect = open(args.expect_file, encoding="utf-8").read().strip()
+        print(f"  Referencia BER desde '{args.expect_file}' "
+              f"({len(args.expect)} chars).")
 
     config = ModemConfig(scheme=args.scheme)
     ecc = ECCConfig(scheme="rs", nsym=args.nsym)
@@ -228,13 +239,24 @@ def _report(asm, args, t_first, n_proc, n_accept, best_peak=0.0):
             print("     aumenta --hold-ms en el TX, acerca la cámara o mejora el foco.")
     if asm.done:
         dt = (time.time() - t_first) if t_first else 0.0
-        print(f"  ✓ MENSAJE COMPLETO ({len(asm.text)} chars, {dt:.1f} s)")
+        print(f"  ✓ MENSAJE COMPLETO  ({len(asm.text)} caracteres)")
         print(f"  RX: '{asm.text}'")
+        print(f"  ── Métricas (rúbrica Fase C) ──")
+        print(f"  Tiempo de transmisión : {dt:6.2f} s    "
+              f"{'✓ < 10 s' if dt < 10 else '✗ ≥ 10 s'}")
         if args.expect is not None:
             ber = char_ber(asm.text, args.expect)
-            ok = asm.text == args.expect
-            print(f"  Exacto: {'✓' if ok else '✗'}   BER≈{ber:.2e}"
-                  f"   {'(< 1e-4 ✓)' if ber < 1e-4 else ''}")
+            exact = asm.text == args.expect
+            nchar_err = sum(1 for i in range(min(len(asm.text), len(args.expect)))
+                            if asm.text[i] != args.expect[i]) \
+                + abs(len(asm.text) - len(args.expect))
+            print(f"  Coincidencia exacta   : {'✓ SÍ' if exact else '✗ NO'}  "
+                  f"({nchar_err} caracteres distintos)")
+            print(f"  BER                   : {ber:.2e}    "
+                  f"{'✓ < 1e-4' if ber < 1e-4 else '✗ ≥ 1e-4'}")
+        else:
+            print("  BER: sin referencia. Usa --expect-file mensaje.txt "
+                  "(o --expect) para medirlo.")
     else:
         print(f"  ✗ Mensaje incompleto — progreso {asm.progress()}")
         if asm.chunks:
