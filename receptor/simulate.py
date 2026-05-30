@@ -17,11 +17,17 @@ def simulate_capture(frame: np.ndarray,
                      noise_std: float = 8.0,
                      brightness: float = 1.0,
                      blur_k: int = 3,
-                     bg_color: int = 80) -> np.ndarray:
+                     bg_color: int = 80,
+                     ambient: float = 0.0,
+                     gradient: float = 0.0) -> np.ndarray:
     """
     Simula la imagen que capturaría la cámara.
 
     angle_deg : ángulo de inclinación respecto a la frontal (0 = frontal).
+    ambient   : nivel aditivo constante (luz ambiente) sumado a toda la imagen.
+    gradient  : 0..1, atenúa la iluminación de izquierda a derecha (luz lateral).
+                Reproduce un gradiente ESPACIAL que sólo la calibración 2D
+                (mapa a(x,y)/b(x,y)) puede compensar.
     """
     gray = (cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             if frame.ndim == 3 else frame.copy())
@@ -44,9 +50,14 @@ def simulate_capture(frame: np.ndarray,
     if blur_k >= 3:
         cap = cv2.GaussianBlur(cap, (blur_k | 1, blur_k | 1), 0)
 
-    # — Variación de brillo (auto-exposure) —
-    if brightness != 1.0:
-        cap = np.clip(cap.astype(float) * brightness, 0, 255).astype(np.uint8)
+    # — Variación de brillo (auto-exposure) + gradiente espacial + ambiente —
+    if brightness != 1.0 or gradient > 0.0 or ambient != 0.0:
+        capf = cap.astype(float) * brightness
+        if gradient > 0.0:
+            ramp = np.linspace(1.0 - gradient, 1.0, cap.shape[1])[None, :]
+            capf *= ramp
+        capf += ambient
+        cap = np.clip(capf, 0, 255).astype(np.uint8)
 
     # — Ruido gaussiano de sensor —
     if noise_std > 0:

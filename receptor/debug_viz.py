@@ -112,5 +112,44 @@ def banner(image: np.ndarray, text: str,
     return np.vstack([bar, image])
 
 
+def plot1d(series: list, colors: list, w: int = 460, h: int = 320,
+           hlines: list = None, ymin: float = None, ymax: float = None,
+           bg: int = 25) -> np.ndarray:
+    """
+    Gráfico de líneas 1-D nativo en cv2 (sin matplotlib, apto para tiempo real).
+    series : lista de arrays 1-D a dibujar; colors : color BGR por serie.
+    hlines : lista de (valor_y, color_BGR) para líneas horizontales de referencia.
+    """
+    canvas = np.full((h, w, 3), bg, np.uint8)
+    pad = 24
+    all_vals = np.concatenate([np.asarray(s, float) for s in series if len(s)]) \
+        if any(len(s) for s in series) else np.array([0.0, 1.0])
+    if hlines:
+        all_vals = np.concatenate([all_vals, [v for v, _ in hlines]])
+    lo = ymin if ymin is not None else float(all_vals.min())
+    hi = ymax if ymax is not None else float(all_vals.max())
+    if hi - lo < 1e-9:
+        hi, lo = lo + 1, lo - 1
+
+    def Y(v):
+        return int(h - pad - (v - lo) / (hi - lo) * (h - 2 * pad))
+
+    def X(i, n):
+        return int(pad + i / max(1, n - 1) * (w - 2 * pad))
+
+    cv2.line(canvas, (pad, Y(lo)), (w - pad, Y(lo)), (90, 90, 90), 1)   # eje y=lo
+    if hlines:
+        for v, clr in hlines:
+            cv2.line(canvas, (pad, Y(v)), (w - pad, Y(v)), clr, 1, cv2.LINE_AA)
+    for s, clr in zip(series, colors):
+        s = np.asarray(s, float)
+        n = len(s)
+        if n == 0:
+            continue
+        pts = np.array([[X(i, n), Y(s[i])] for i in range(n)], np.int32)
+        cv2.polylines(canvas, [pts], False, clr, 1, cv2.LINE_AA)
+    return canvas
+
+
 def _safe(tag: str) -> str:
     return "".join(c if c.isalnum() else "_" for c in tag).strip("_").lower()

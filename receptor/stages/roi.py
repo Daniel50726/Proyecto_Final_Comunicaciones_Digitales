@@ -28,16 +28,47 @@ from ..debug_viz import to_bgr, hstack_panels, banner
 from ..pipeline import PipelineStage, PipelineContext
 
 
+# ── Normalización de iluminación (refuerzo B1) ────────────────
+def normalize_illumination(gray: np.ndarray,
+                           illum_sigma: float,
+                           clahe_clip: float = 2.5,
+                           tiles: int = 8) -> np.ndarray:
+    """
+    Aplana gradientes ESPACIALES de iluminación antes de binarizar.
+
+    El umbral adaptativo compensa la MEDIA local pero no la AMPLITUD: bajo un
+    gradiente fuerte la señal en el lado oscuro cae al nivel del ruido y los
+    finders se pierden.  Aquí:
+      1. Flat-field: divide por la iluminación estimada (blur grande) → elimina
+         el gradiente multiplicativo y el offset lento (ambiente).
+      2. CLAHE: ecualización de histograma local → recupera el contraste de los
+         anillos del finder en zonas oscuras sin saturar las claras.
+    """
+    illum = cv2.GaussianBlur(gray, (0, 0), sigmaX=max(8.0, illum_sigma))
+    ff = cv2.divide(gray.astype(np.float32), illum.astype(np.float32) + 1e-3)
+    ff = np.clip(ff * 128.0, 0, 255).astype(np.uint8)
+    clahe = cv2.createCLAHE(clipLimit=clahe_clip, tileGridSize=(tiles, tiles))
+    return clahe.apply(ff)
+
+
 # ── Preprocesamiento ──────────────────────────────────────────
 def preprocess_for_detection(frame: np.ndarray,
                              blur_k: int = 5,
                              block_sz: int = 51,
-                             C_offset: int = 10) -> tuple:
-    """Gris → blur → umbral adaptativo INV → morfología.  Returns (gray, binary)."""
+                             C_offset: int = 10,
+                             normalize: bool = True,
+                             illum_sigma: float = 60.0) -> tuple:
+    """
+    Gris → [normalización de iluminación] → blur → umbral adaptativo INV → morfología.
+
+    `gray` devuelto es SIEMPRE el original (se usa para warp/visualización);
+    la binarización opera sobre la versión normalizada.  Returns (gray, binary).
+    """
     gray = (cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             if frame.ndim == 3 else frame.copy())
 
-    blurred = cv2.GaussianBlur(gray, (blur_k | 1, blur_k | 1), 0)
+    work = normalize_illumination(gray, illum_sigma) if normalize else gray
+    blurred = cv2.GaussianBlur(work, (blur_k | 1, blur_k | 1), 0)
 
     block_sz = max(21, block_sz | 1)
     binary = cv2.adaptiveThreshold(
@@ -248,7 +279,10 @@ def detect_roi(frame: np.ndarray, config,
     frame_pad = cv2.copyMakeBorder(frame, pad, pad, pad, pad,
                                    cv2.BORDER_CONSTANT, value=128)
 
-    gray_pad, binary_pad = preprocess_for_detection(frame_pad, block_sz=block_sz)
+    # illum_sigma ≈ tamaño del finder: el blur elimina la estructura del finder
+    # dejando solo la iluminación de fondo a aplanar.
+    gray_pad, binary_pad = preprocess_for_detection(
+        frame_pad, block_sz=block_sz, illum_sigma=float(finder_px))
     gray = gray_pad[pad:-pad, pad:-pad]
     binary = binary_pad[pad:-pad, pad:-pad]
 
