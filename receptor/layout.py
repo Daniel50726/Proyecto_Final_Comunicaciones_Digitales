@@ -130,6 +130,39 @@ def sample_cells(image: np.ndarray, positions: list,
     return np.asarray(means), np.asarray(stds)
 
 
+def grid_cell_means(image: np.ndarray, config: ModemConfig,
+                    margin: int = None, median: bool = True) -> np.ndarray:
+    """
+    Media del interior de TODAS las celdas de la grilla, VECTORIZADO (un solo
+    reshape) → ~1 ms en vez de ~50 ms con un bucle por celda.  Devuelve un array
+    (M, N).  Indexar por (r,c) para obtener cada celda.
+
+    median=True aplica un filtro de mediana a TODA la imagen una vez (suprime
+    reflejos puntuales) antes de promediar — equivalente robusto y rápido a
+    `sample_cells_robust`.  Requiere imagen canónica (M·cs × N·cs).
+    """
+    cs, M, N = config.cell_size, config.M, config.N
+    if margin is None:
+        margin = max(1, cs // 8)
+    img = image[:M * cs, :N * cs]
+    if img.ndim == 3:
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    if median:
+        k = max(3, (cs // 4) | 1)
+        img = cv2.medianBlur(img.astype(np.uint8), k)
+    g = img.reshape(M, cs, N, cs).astype(np.float32)
+    gi = g[:, margin:cs - margin, :, margin:cs - margin]
+    return gi.mean(axis=(1, 3))      # (M, N)
+
+
+def sample_cells_grid(means_grid: np.ndarray, positions: list) -> np.ndarray:
+    """Extrae los valores de `positions` (r,c) de una grilla (M,N) de medias."""
+    if not positions:
+        return np.array([])
+    rc = np.asarray(positions)
+    return means_grid[rc[:, 0], rc[:, 1]]
+
+
 def sample_cells_robust(image: np.ndarray, positions: list,
                         cell_size: int, margin: int = None) -> np.ndarray:
     """

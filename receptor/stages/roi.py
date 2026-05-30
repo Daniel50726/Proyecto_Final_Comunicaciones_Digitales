@@ -44,7 +44,18 @@ def normalize_illumination(gray: np.ndarray,
       2. CLAHE: ecualización de histograma local → recupera el contraste de los
          anillos del finder en zonas oscuras sin saturar las claras.
     """
-    illum = cv2.GaussianBlur(gray, (0, 0), sigmaX=max(8.0, illum_sigma))
+    # Estimación de iluminación (baja frecuencia): un GaussianBlur de sigma
+    # grande a resolución completa es carísimo (~2.5 s a 1280×720).  Se calcula
+    # en una imagen MUY reducida y se reescala → resultado casi idéntico y
+    # ~100× más rápido (clave para tiempo real).
+    sigma = max(8.0, illum_sigma)
+    h, w = gray.shape
+    ds = max(1, int(round(sigma / 8.0)))
+    small = cv2.resize(gray, (max(1, w // ds), max(1, h // ds)),
+                       interpolation=cv2.INTER_AREA)
+    small = cv2.GaussianBlur(small, (0, 0), sigmaX=max(2.0, sigma / ds))
+    illum = cv2.resize(small, (w, h), interpolation=cv2.INTER_LINEAR)
+
     ff = cv2.divide(gray.astype(np.float32), illum.astype(np.float32) + 1e-3)
     ff = np.clip(ff * 128.0, 0, 255).astype(np.uint8)
     clahe = cv2.createCLAHE(clipLimit=clahe_clip, tileGridSize=(tiles, tiles))
@@ -231,7 +242,7 @@ def assign_corners(groups: list, config) -> dict:
 
 
 # ── Homografía de perspectiva + rectificación ─────────────────
-def compute_homography(corners: dict, config) -> tuple:
+def compute_homography(corners: dict, config, gray: np.ndarray = None) -> tuple:
     cs, ms = config.cell_size, config.marker_cells
     W, H = float(config.frame_width), float(config.frame_height)
 
@@ -246,6 +257,20 @@ def compute_homography(corners: dict, config) -> tuple:
         dst.append(np.array(canon_center[role], np.float32) + off)
     src = np.vstack(src).astype(np.float32)
     dst = np.vstack(dst).astype(np.float32)
+
+    # Refinamiento SUB-PÍXEL de las 12 esquinas contra la imagen real: en
+    # capturas reales approxPolyDP deja las esquinas con ~varios px de error;
+    # cornerSubPix las afina y reduce el reproj (clave para alinear las celdas
+    # LEJANAS del payload, no solo el preámbulo cercano a los finders).
+    if gray is not None:
+        pts = src.reshape(-1, 1, 2).copy()
+        win = max(3, cs // 4)
+        crit = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.01)
+        try:
+            cv2.cornerSubPix(gray, pts, (win, win), (-1, -1), crit)
+            src = pts.reshape(-1, 2)
+        except cv2.error:
+            pass
 
     H_mat, _ = cv2.findHomography(src, dst, cv2.RANSAC, ransacReprojThreshold=3.0)
     if H_mat is None:
@@ -307,7 +332,7 @@ def detect_roi(frame: np.ndarray, config,
                     gray=gray, binary=binary, candidates=candidates)
 
     corners_pad = assign_corners(groups_pad, config)
-    H_pad, reproj = compute_homography(corners_pad, config)
+    H_pad, reproj = compute_homography(corners_pad, config, gray=gray_pad)
     success = H_pad is not None and reproj <= reproj_thresh
 
     # H del espacio padded → original:  H = H_pad · T_pad

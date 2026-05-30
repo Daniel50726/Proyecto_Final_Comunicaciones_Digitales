@@ -27,7 +27,7 @@ import numpy as np
 
 from .config import ModemConfig
 from .channel_coding import ECCConfig, rs_decode_payload, bits_to_bytes, plan_codewords
-from .layout import compute_frame_layout, sample_cells_robust
+from .layout import compute_frame_layout, grid_cell_means, sample_cells_grid
 from .modulation import symbols_to_bits
 from .preamble import build_preamble
 from .frame_builder import payload_capacity_bytes, assemble_payload_frame
@@ -109,7 +109,8 @@ def decode_payload_bytes(image: np.ndarray, config: ModemConfig,
     cells_per_byte = 16 if config.scheme == "BPSK_Manchester" else 4
     n_cells = cap * cells_per_byte
 
-    vals = sample_cells_robust(image, data_cells[:n_cells], config.cell_size)
+    means = grid_cell_means(image, config, median=True)     # vectorizado (~1 ms)
+    vals = sample_cells_grid(means, data_cells[:n_cells])
     syms = np.clip(np.round(vals), 0, 255).astype(np.uint8)
     bits = symbols_to_bits(syms, config, thr)
     recv = bits_to_bytes(bits)[:cap]

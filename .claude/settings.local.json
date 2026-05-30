@@ -26,7 +26,11 @@
       "Bash(tasklist)",
       "Bash(taskkill //F //IM python3.12.exe)",
       "Bash(taskkill //F //IM python.exe)",
-      "Bash(python -u -c ' *)"
+      "Bash(python -u -c ' *)",
+      "Bash(python -c \"import receptor.camera as c; print\\('camera OK; backends:', list\\(c.BACKENDS\\)\\)\")",
+      "Bash(python rx.py --help)",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('rx.py',encoding='utf-8'\\).read\\(\\)\\); print\\('rx.py sintaxis OK'\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('rx.py',encoding='utf-8'\\).read\\(\\)\\); print\\('rx.py OK'\\)\")"
     ]
   }
 }

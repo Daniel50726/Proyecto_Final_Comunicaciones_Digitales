@@ -20,35 +20,90 @@ import time
 
 import cv2
 
+# Backends por nombre (los no disponibles en la plataforma se ignoran al abrir)
+BACKENDS = {
+    "any": getattr(cv2, "CAP_ANY", 0),
+    "dshow": getattr(cv2, "CAP_DSHOW", 700),
+    "msmf": getattr(cv2, "CAP_MSMF", 1400),
+    "v4l2": getattr(cv2, "CAP_V4L2", 200),
+}
 
-def configure_camera(cap: cv2.VideoCapture, width: int = 1280, height: int = 720,
-                     exposure: float = -6.0, verbose: bool = True) -> dict:
+
+def _safe_read(cap):
+    """read() que captura cv2.error (MSMF puede lanzar en cuadros corruptos)."""
+    try:
+        return cap.read()
+    except cv2.error:
+        return False, None
+
+
+def open_camera(cam_id: int, preferred: str = "any",
+                width: int = 1280, height: int = 720, verbose: bool = True):
     """
-    Intenta desactivar los automáticos y fijar resolución/exposición.
-    Devuelve un dict con lo que realmente quedó aplicado (mejor esfuerzo).
+    Abre la cámara probando el backend preferido y, si falla, cae a los demás.
 
-    Nota sobre AUTO_EXPOSURE: en backend DSHOW (Windows) 0.25≈manual, 0.75≈auto;
-    en V4L2 (Linux) 1=manual, 3=auto.  Se prueban ambos convenios.
+    IMPORTANTE: la resolución se fija ANTES del primer read().  Cambiarla después
+    de haber leído un cuadro provoca el bug de MSMF `_step >= minstep` (stride
+    inconsistente).  Si fijar la resolución rompe la captura, se reintenta SIN
+    forzarla (resolución nativa; el pipeline rectifica a canónico igualmente).
+    Devuelve (cap, nombre_backend) o (None, None).
+    """
+    order = [preferred] + [b for b in ("any", "msmf", "dshow") if b != preferred]
+    for name in order:
+        flag = BACKENDS.get(name, BACKENDS["any"])
+        for try_res in (True, False):        # 1º con resolución fijada, 2º nativa
+            try:
+                cap = cv2.VideoCapture(cam_id, flag)
+                if not cap.isOpened():
+                    cap.release()
+                    break                    # este backend no abre → siguiente
+                if try_res and width:
+                    cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+                    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+                try:
+                    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                except cv2.error:
+                    pass
+                ok, _ = _safe_read(cap)
+                if ok:
+                    if verbose:
+                        res = "fijada" if try_res else "nativa"
+                        print(f"  Cámara abierta: backend '{name}', resolución {res}.")
+                    return cap, name
+                cap.release()
+            except Exception as e:
+                if verbose:
+                    print(f"  backend '{name}' no usable ({e}); probando otro…")
+                break
+    return None, None
+
+
+def configure_camera(cap: cv2.VideoCapture, exposure: float = -6.0,
+                     verbose: bool = True) -> dict:
+    """
+    Intenta desactivar los automáticos (exposición/foco/WB).  NO toca resolución
+    ni buffer (eso se fija en open_camera, antes del primer read, para evitar el
+    bug MSMF `_step >= minstep`).  Mejor esfuerzo: cada set en try; si la cámara
+    no soporta una propiedad, cap.get() devuelve -1 y simplemente se compensa por
+    software en la calibración.
     """
     applied = {}
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
-    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)        # minimizar cola interna
 
-    # — Exposición manual —
-    for val in (0.25, 1):                      # DSHOW=manual, V4L2=manual
-        cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, val)
-    cap.set(cv2.CAP_PROP_EXPOSURE, exposure)
+    def trySet(prop, val):
+        try:
+            cap.set(prop, val)
+        except cv2.error:
+            pass
 
+    # — Exposición manual (convenios DSHOW=0.25 / V4L2=1) —
+    for val in (0.25, 1):
+        trySet(cv2.CAP_PROP_AUTO_EXPOSURE, val)
+    trySet(cv2.CAP_PROP_EXPOSURE, exposure)
     # — Foco manual —
-    cap.set(cv2.CAP_PROP_AUTOFOCUS, 0)
-
+    trySet(cv2.CAP_PROP_AUTOFOCUS, 0)
     # — Balance de blancos manual —
-    cap.set(cv2.CAP_PROP_AUTO_WB, 0)
-    try:
-        cap.set(cv2.CAP_PROP_WB_TEMPERATURE, 4500)
-    except Exception:
-        pass
+    trySet(cv2.CAP_PROP_AUTO_WB, 0)
+    trySet(cv2.CAP_PROP_WB_TEMPERATURE, 4500)
 
     for name, prop in [("width", cv2.CAP_PROP_FRAME_WIDTH),
                        ("height", cv2.CAP_PROP_FRAME_HEIGHT),
@@ -78,12 +133,13 @@ class CameraStream:
         cam.stop()
     """
 
-    def __init__(self, cam_id: int = 0, backend: int = None,
+    def __init__(self, cam_id: int = 0, backend: str = "any",
                  configure: bool = True, exposure: float = -6.0):
-        self.cap = (cv2.VideoCapture(cam_id, backend) if backend is not None
-                    else cv2.VideoCapture(cam_id))
-        if not self.cap.isOpened():
-            raise RuntimeError(f"No se pudo abrir la cámara {cam_id}")
+        self.cap, self.backend = open_camera(cam_id, preferred=backend)
+        if self.cap is None:
+            raise RuntimeError(
+                f"No se pudo abrir la cámara {cam_id} con ningún backend. "
+                f"¿Está conectada / la usa otra app / permisos de cámara?")
         if configure:
             configure_camera(self.cap, exposure=exposure)
         self._lock = threading.Lock()
@@ -103,11 +159,20 @@ class CameraStream:
         return self
 
     def _loop(self):
+        errors = 0
         while self._running:
-            ok, frame = self.cap.read()
-            if not ok:
+            try:
+                ok, frame = self.cap.read()
+            except cv2.error:
+                ok, frame = False, None        # cuadro corrupto (MSMF) → saltar
+            if not ok or frame is None:
+                errors += 1
+                if errors > 200:               # cámara desconectada/colgada
+                    self._running = False
+                    break
                 time.sleep(0.005)
                 continue
+            errors = 0
             with self._lock:
                 self._frame = frame
                 self._seq += 1
