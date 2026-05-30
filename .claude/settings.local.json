@@ -22,7 +22,11 @@
       "Bash(python run_camera.py --source sim --text \"Hola PDS|Modem optico|Fase B video|listo\" --spc 3 --noise 4 --debug save)",
       "Bash(python run_receptor.py --source image --path captura.png --debug save)",
       "Bash(python generate_frame.py --text \"Hola Mundo! PDS 2026\" --ecc rs --nsym 16 --out frame_rs.png)",
-      "Bash(python run_receptor.py --source sim --path frame_rs.png --ecc rs --nsym 16 --angle 15 --noise 8 --brightness 0.7 --debug none)"
+      "Bash(python run_receptor.py --source sim --path frame_rs.png --ecc rs --nsym 16 --angle 15 --noise 8 --brightness 0.7 --debug none)",
+      "Bash(tasklist)",
+      "Bash(taskkill //F //IM python3.12.exe)",
+      "Bash(taskkill //F //IM python.exe)",
+      "Bash(python -u -c ' *)"
     ]
   }
 }

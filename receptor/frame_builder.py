@@ -32,15 +32,27 @@ def payload_capacity_bytes(config: ModemConfig, n_data_cells: int) -> int:
 
 def assemble_frame(text: str, config: ModemConfig,
                    ecc: ECCConfig = None) -> dict:
-    """Construye la imagen de trama lista para mostrar/capturar."""
+    """Construye la imagen de trama a partir de TEXTO (atajo de Fase B)."""
+    fd = assemble_payload_frame(text.encode("utf-8"), config, ecc)
+    fd["text"] = text
+    return fd
+
+
+def assemble_payload_frame(data: bytes, config: ModemConfig,
+                           ecc: ECCConfig = None) -> dict:
+    """
+    Construye la imagen de trama a partir de BYTES de payload arbitrarios
+    (p.ej. un paquete de protocolo de Fase C: cabecera + datos).  Idéntico a
+    `assemble_frame` pero sin asumir que el payload es texto UTF-8.
+    """
     ecc = ecc or ECCConfig()
     layout = compute_frame_layout(config)
     preamble = build_preamble(config, layout)
     data_cells = preamble["data_positions"]
 
-    # — Payload: texto → bytes → RS → bits → símbolos —
+    # — Payload: bytes → RS → bits → símbolos —
     payload_bytes = payload_capacity_bytes(config, len(data_cells))
-    raw = text.encode("utf-8")
+    raw = bytes(data)
     encoded = rs_encode_payload(raw, payload_bytes, ecc)     # exactamente payload_bytes
     pay_bits = bytes_to_bits(encoded)
     pay_syms = bits_to_symbols(pay_bits, config)
@@ -65,6 +77,6 @@ def assemble_frame(text: str, config: ModemConfig,
     draw_markers_on_frame(frame, layout, config)
 
     return {"frame": frame, "config": config, "layout": layout,
-            "preamble": preamble, "ecc": ecc, "text": text,
+            "preamble": preamble, "ecc": ecc, "data": raw,
             "payload_bytes": payload_bytes, "encoded": encoded,
             "n_payload_cells": n}
