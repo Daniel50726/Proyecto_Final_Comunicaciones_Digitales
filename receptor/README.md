@@ -173,6 +173,11 @@ hasta tener todos los trozos o ver EOM.
 
 - **`--scheme` y `--nsym` deben coincidir** en `tx.py` y `rx.py` (los defaults ya
   coinciden: BPSK_Manchester, nsym=16).
+- **`--scheme 4ASK`** (en AMBOS lados) triplica la capacidad (≈233 vs 73 bytes/
+  cuadro). Usa 4 niveles de gris (0/85/170/255); el canal real es NO LINEAL
+  (gamma del monitor+cámara), así que en 4ASK los pilotos llevan los 4 niveles y
+  la calibración construye una LUT que invierte la gamma (`mode="4ask-lut"`).
+  Es más sensible al ruido/distancia que BPSK: úsalo con buena luz/foco.
 - `--hold-ms` (TX, def 160): ms que cada cuadro permanece en pantalla. Súbelo si
   el receptor rechaza muchos cuadros.
 - `rx.py --diag`: muestra la grilla rectificada y el **pico de correlación Gold**

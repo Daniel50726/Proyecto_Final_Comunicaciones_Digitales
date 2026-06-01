@@ -16,7 +16,8 @@ import numpy as np
 
 from .config import ModemConfig
 
-_PILOT_SEQ = np.array([0, 255, 0, 255], dtype=np.uint8)
+_PILOT_BPSK = np.array([0, 255], dtype=np.uint8)            # 2 niveles
+_PILOT_4ASK = np.array([0, 85, 170, 255], dtype=np.uint8)   # 4 niveles → gamma
 
 
 # ── Patrón finder concéntrico (estilo QR) ─────────────────────
@@ -79,9 +80,15 @@ def compute_frame_layout(config: ModemConfig) -> dict:
             "pilot": pilot_positions, "data": data_positions, "corners": corners}
 
 
-def generate_pilot_values(n: int) -> np.ndarray:
-    """n valores piloto alternando 0↔255 (idéntico a TX)."""
-    return _PILOT_SEQ[np.arange(n) % len(_PILOT_SEQ)]
+def generate_pilot_values(n: int, scheme: str = "BPSK_Manchester") -> np.ndarray:
+    """
+    n valores piloto deterministas (idéntico en TX y RX).
+      BPSK → ciclo [0, 255]            (2 niveles: calibración lineal basta).
+      4ASK → ciclo [0, 85, 170, 255]   (4 niveles: permiten estimar/invertir la
+             respuesta NO LINEAL del canal (gamma) y recolocar los niveles medios).
+    """
+    seq = _PILOT_4ASK if scheme == "4ASK" else _PILOT_BPSK
+    return seq[np.arange(n) % len(seq)]
 
 
 def draw_markers_on_frame(frame: np.ndarray, layout: dict,

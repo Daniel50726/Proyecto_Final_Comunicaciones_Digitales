@@ -31,7 +31,8 @@
       "Bash(python rx.py --help)",
       "Bash(python -c \"import ast; ast.parse\\(open\\('rx.py',encoding='utf-8'\\).read\\(\\)\\); print\\('rx.py sintaxis OK'\\)\")",
       "Bash(python -c \"import ast; ast.parse\\(open\\('rx.py',encoding='utf-8'\\).read\\(\\)\\); print\\('rx.py OK'\\)\")",
-      "Bash(python -c \"import ast; m=ast.parse\\(open\\('rx.py',encoding='utf-8'\\).read\\(\\)\\)\")"
+      "Bash(python -c \"import ast; m=ast.parse\\(open\\('rx.py',encoding='utf-8'\\).read\\(\\)\\)\")",
+      "Bash(python -c \"import ast; [ast.parse\\(open\\(f,encoding='utf-8'\\).read\\(\\)\\) for f in \\('tx.py','rx.py'\\)]; print\\('tx/rx OK'\\)\")"
     ]
   }
 }

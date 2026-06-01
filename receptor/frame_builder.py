@@ -67,7 +67,7 @@ def assemble_payload_frame(data: bytes, config: ModemConfig,
             frame[r * cs:(r + 1) * cs, c * cs:(c + 1) * cs] = v
 
     # — Pilotos —
-    paint(layout["pilot"], generate_pilot_values(len(layout["pilot"])))
+    paint(layout["pilot"], generate_pilot_values(len(layout["pilot"]), config.scheme))
     # — Preámbulo —
     paint(preamble["preamble_cells"], preamble["symbols"])
     # — Payload —

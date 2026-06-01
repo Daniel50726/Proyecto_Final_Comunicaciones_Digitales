@@ -231,6 +231,23 @@ def _effective_cw(total_bytes: int, ecc: ECCConfig) -> int:
     return min(ecc.cw, total_bytes)
 
 
+_SCRAMBLE_KEY = 0xC0DE51
+
+
+def _scramble(arr: np.ndarray) -> np.ndarray:
+    """
+    Blanqueo de energía: XOR con una secuencia pseudoaleatoria DETERMINISTA.
+    Rompe las regiones sólidas (p.ej. el relleno 0x00, que en 4ASK serían grandes
+    manchas negras que engullen los finders) → el grid transmitido parece ruido
+    moteado y la detección de finders es robusta.  XOR es su propia inversa, así
+    que la misma función sirve para des-scramblear.  No mueve los errores entre
+    bytes (preserva la corrección de ráfagas de RS).
+    """
+    arr = np.asarray(arr, np.uint8)
+    ks = np.random.RandomState(_SCRAMBLE_KEY).randint(0, 256, len(arr)).astype(np.uint8)
+    return (arr ^ ks).astype(np.uint8)
+
+
 def plan_codewords(total_bytes: int, ecc: ECCConfig) -> tuple:
     """(nº palabras-código, bytes de datos utilizables, cw_efectiva)."""
     if ecc.scheme == "none":
@@ -249,27 +266,20 @@ def rs_encode_payload(data: bytes, total_bytes: int, ecc: ECCConfig) -> np.ndarr
     Rellena con 0x00, parte en n_cw bloques de k, RS-codifica cada uno y
     rellena el resto con 0x00.  Determinista (TX y RX calculan igual).
     """
-    if ecc.scheme == "none":
-        out = np.zeros(total_bytes, np.uint8)
-        d = np.frombuffer(data[:total_bytes], np.uint8)
-        out[:len(d)] = d
-        return out
-
     n_cw, usable, cw = plan_codewords(total_bytes, ecc)
-    if n_cw == 0:                              # sin espacio para paridad
-        out = np.zeros(total_bytes, np.uint8)
+    out = np.zeros(total_bytes, np.uint8)
+    if ecc.scheme == "none" or n_cw == 0:      # sin RS (o sin espacio para paridad)
         d = np.frombuffer(data[:total_bytes], np.uint8)
         out[:len(d)] = d
-        return out
-    k = cw - ecc.nsym
-    msg = bytearray(data[:usable]) + bytearray(max(0, usable - len(data)))
-    stream = bytearray()
-    for c in range(n_cw):
-        block = list(msg[c * k:(c + 1) * k])
-        stream += bytearray(_rs_encode_msg(block, ecc.nsym))
-    out = np.zeros(total_bytes, np.uint8)
-    out[:len(stream)] = np.frombuffer(bytes(stream), np.uint8)
-    return out
+    else:
+        k = cw - ecc.nsym
+        msg = bytearray(data[:usable]) + bytearray(max(0, usable - len(data)))
+        stream = bytearray()
+        for c in range(n_cw):
+            block = list(msg[c * k:(c + 1) * k])
+            stream += bytearray(_rs_encode_msg(block, ecc.nsym))
+        out[:len(stream)] = np.frombuffer(bytes(stream), np.uint8)
+    return _scramble(out)                       # blanqueo (detección robusta)
 
 
 def rs_decode_payload(recv: np.ndarray, total_bytes: int,
@@ -278,7 +288,7 @@ def rs_decode_payload(recv: np.ndarray, total_bytes: int,
     Flujo de bytes recibido → bytes de datos corregidos + estadísticas.
     Returns: {"data": bytes, "n_corrected": int, "n_failed": int}.
     """
-    recv = np.asarray(recv, np.uint8)
+    recv = _scramble(np.asarray(recv, np.uint8))    # des-blanqueo (inverso del TX)
     if ecc.scheme == "none":
         return {"data": recv.tobytes(), "n_corrected": 0, "n_failed": 0}
 

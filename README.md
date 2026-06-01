@@ -22,6 +22,7 @@ grilla de macropíxeles en escala de grises.
 | `run_receptor.py` | Receptor de cuadro único (CLI). |
 | `benchmark_b5.py` | Evaluación cuantitativa de BER (ablación de correcciones). |
 | `run_camera.py` | Modo vídeo en vivo (cámara o stream simulado). |
+| `PIPELINE_Y_DIFICULTADES.md` | **Explicación técnica completa del pipeline y las dificultades resueltas.** |
 | `instrucciones_fase_*.md` | Requerimientos técnicos de cada fase. |
 | `HISTORICO_PROYECTO.md` | Histórico de diseño y decisiones. |
 | `frame_tx.png` | Trama de ejemplo generada por la Fase A. |

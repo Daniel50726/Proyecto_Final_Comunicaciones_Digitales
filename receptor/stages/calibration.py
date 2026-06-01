@@ -55,6 +55,27 @@ def _eval_plane(coef: np.ndarray, W: int, H: int) -> np.ndarray:
     return coef[0] + coef[1] * xs + coef[2] * ys
 
 
+def _build_levelize_lut(received: np.ndarray, expected: np.ndarray) -> tuple:
+    """
+    Construye una LUT 0..255 que INVIERTE la respuesta no lineal del canal
+    (gamma) usando los pilotos multi-nivel.  Para cada nivel TX conocido L se
+    toma la MEDIANA de los pilotos recibidos a ese nivel → pares (recibido→L).
+    Interpolación lineal a trozos entre esos puntos → un valor recibido se mapea
+    al nivel TX que le corresponde, dejando los niveles equiespaciados otra vez.
+
+    Returns (lut[256], puntos_recibidos, niveles_tx).
+    """
+    levels = np.unique(expected)
+    R = np.array([np.median(received[expected == L]) for L in levels], dtype=float)
+    L = levels.astype(float)
+    # Forzar monotonía estricta de R (np.interp exige xp creciente)
+    order = np.argsort(R)
+    R, L = R[order], L[order]
+    R = np.maximum.accumulate(R) + np.arange(len(R)) * 1e-3
+    lut = np.interp(np.arange(256), R, L).clip(0, 255).astype(np.uint8)
+    return lut, R, L
+
+
 class CalibrationStage(PipelineStage):
     name = "Calibracion"
     required = True
@@ -76,12 +97,17 @@ class CalibrationStage(PipelineStage):
         img = ctx.warped if ctx.warped.ndim == 2 else cv2.cvtColor(ctx.warped, cv2.COLOR_BGR2GRAY)
         W, H = cfg.frame_width, cfg.frame_height
 
-        # 1 · Pilotos: posiciones, valores esperados (0↔255) y medidos
+        # 1 · Pilotos: posiciones, valores esperados (según esquema) y medidos
         layout = compute_frame_layout(cfg)
         pilots = layout["pilot"]
-        expected = generate_pilot_values(len(pilots)).astype(float)
+        expected = generate_pilot_values(len(pilots), cfg.scheme).astype(float)
         received, _ = sample_cells(img, pilots, cfg.cell_size)
         centers = cell_centers_px(pilots, cfg.cell_size)   # (x,y) por piloto
+
+        # 4ASK: calibración NO LINEAL por LUT (invierte la gamma con los pilotos
+        # multi-nivel) → los 4 niveles vuelven a 0/85/170/255 equiespaciados.
+        if cfg.scheme == "4ASK":
+            return self._run_4ask(ctx, cfg, img, pilots, expected, received)
 
         blk = expected < 128     # pilotos negros (TX=0)
         wht = ~blk               # pilotos blancos (TX=255)
@@ -152,12 +178,39 @@ class CalibrationStage(PipelineStage):
         # grilla, no un fallo de la calibración en sí.
         return abs(a_g) > 1e-3
 
+    def _run_4ask(self, ctx, cfg, img, pilots, expected, received) -> bool:
+        """Calibración 4ASK: LUT no lineal desde pilotos de 4 niveles (gamma)."""
+        lut, R, L = _build_levelize_lut(received, expected)
+        calibrated = lut[img.astype(np.uint8)]
+
+        cal_pilots, _ = sample_cells(calibrated, pilots, cfg.cell_size)
+        residual = float(np.sqrt(np.mean((cal_pilots - expected) ** 2)))
+
+        ctx.calibrated = calibrated
+        ctx.calib = {"mode": "4ask-lut", "thr": 128.0, "residual": residual,
+                     "lut": lut, "recv_levels": R, "tx_levels": L,
+                     "a": 1.0, "b": 0.0,
+                     "a_map": np.ones(img.shape), "b_map": np.zeros(img.shape)}
+        ctx.metrics["calib_mode"] = "4ask-lut"
+        ctx.metrics["calib_residual"] = round(residual, 2)
+        ctx.metrics["calib_levels_rx"] = [round(float(x), 1) for x in R]
+
+        if self.verbose:
+            print(f"  Modo               : 4ask-lut  (pilotos {len(received)}, 4 niveles)")
+            print(f"  Niveles RX→TX      : "
+                  f"{[round(float(x),1) for x in R]} → {[int(x) for x in L]}")
+            print(f"  Residual pilotos   : {residual:.2f}  (RMS vs 0/85/170/255)")
+            if residual >= self.warn_residual:
+                print(f"  ⚠ residual alto: la gamma comprime los niveles oscuros; "
+                      f"acerca la cámara / mejora la luz / sube --nsym.")
+        return True
+
     def draw_debug(self, ctx: PipelineContext):
         cfg = ctx.config
         cal = ctx.calib
         layout = compute_frame_layout(cfg)
         pilots = layout["pilot"]
-        expected = generate_pilot_values(len(pilots))
+        expected = generate_pilot_values(len(pilots), cfg.scheme)
         centers = cell_centers_px(pilots, cfg.cell_size).astype(int)
 
         # Panel 1: warped con pilotos marcados (negros=azul, blancos=rojo)
