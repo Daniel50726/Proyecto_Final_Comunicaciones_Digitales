@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python run_receptor.py --source sim --angle 15 --debug save)",
+      "Bash(python -c ' *)",
+      "Bash(rm -f _tmp_c3.py _tmp_c6.py)",
+      "Bash(python run_receptor.py --source sim --angle 15 --brightness 0.55 --ambient 60 --gradient 0.5 --debug save)",
+      "Bash(python run_receptor.py --source sim --angle 20 --brightness 0.45 --ambient 85 --gradient 0.75 --debug save)",
+      "Bash(python run_receptor.py --source sim --angle 15 --brightness 0.5 --ambient 78 --gradient 0.62 --debug save)",
+      "Bash(python run_receptor.py --source sim --angle 10 --brightness 0.6 --ambient 25 --gradient 0.7 --debug save)",
+      "Bash(rm -f _tmp_c2.py _tmp_c4.py)",
+      "Bash(python run_receptor.py --source sim --angle 15 --brightness 0.6 --ambient 40 --gradient 0.4 --debug save)",
+      "Bash(python run_receptor.py --source sim --angle 15 --brightness 0.6 --ambient 40 --gradient 0.4 --debug none)",
+      "Bash(python run_receptor.py --source sim --text \"Modem optico PDS 2026 - Fase B receptor\" --ecc rs --nsym 16 --angle 15 --brightness 0.7 --ambient 30 --gradient 0.35 --debug save)",
+      "Bash(python run_receptor.py --source sim --text \"Reed-Solomon corrige rafagas\" --ecc rs --nsym 24 --angle 30 --brightness 0.6 --ambient 40 --gradient 0.4 --debug none)",
+      "Bash(python run_receptor.py --source sim --text \"Reed-Solomon corrige rafagas\" --ecc none --angle 30 --brightness 0.6 --ambient 40 --gradient 0.4 --debug none)",
+      "Bash(python run_receptor.py --source sim --text \"mensaje corto\" --ecc rs --nsym 32 --angle 15 --noise 38 --brightness 0.7 --debug none)",
+      "Bash(python run_receptor.py --source sim --text \"Reed-Solomon protege contra errores de rafaga en el canal optico pantalla-camara del modem PDS\" --ecc rs --nsym 32 --angle 15 --noise 10 --brightness 0.85 --debug none)",
+      "Bash(python run_receptor.py --source sim --text \"Reed-Solomon protege contra errores de rafaga en el canal optico pantalla-camara del modem PDS\" --ecc rs --nsym 32 --angle 15 --noise 38 --brightness 0.7 --debug none)",
+      "Bash(python run_receptor.py --source sim --text \"Modem optico PDS 2026 Fase B\" --ecc none --angle 10 --occlude 0.12 --debug none)",
+      "Bash(python benchmark_b5.py)",
+      "Bash(python run_camera.py --source sim --text \"Hola PDS|Modem optico|Fase B video|listo\" --spc 3 --noise 4 --debug save)",
+      "Bash(python run_receptor.py --source image --path captura.png --debug save)",
+      "Bash(python generate_frame.py --text \"Hola Mundo! PDS 2026\" --ecc rs --nsym 16 --out frame_rs.png)",
+      "Bash(python run_receptor.py --source sim --path frame_rs.png --ecc rs --nsym 16 --angle 15 --noise 8 --brightness 0.7 --debug none)",
+      "Bash(tasklist)",
+      "Bash(taskkill //F //IM python3.12.exe)",
+      "Bash(taskkill //F //IM python.exe)",
+      "Bash(python -u -c ' *)",
+      "Bash(python -c \"import receptor.camera as c; print\\('camera OK; backends:', list\\(c.BACKENDS\\)\\)\")",
+      "Bash(python rx.py --help)",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('rx.py',encoding='utf-8'\\).read\\(\\)\\); print\\('rx.py sintaxis OK'\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('rx.py',encoding='utf-8'\\).read\\(\\)\\); print\\('rx.py OK'\\)\")",
+      "Bash(python -c \"import ast; m=ast.parse\\(open\\('rx.py',encoding='utf-8'\\).read\\(\\)\\)\")",
+      "Bash(python -c \"import ast; [ast.parse\\(open\\(f,encoding='utf-8'\\).read\\(\\)\\) for f in \\('tx.py','rx.py'\\)]; print\\('tx/rx OK'\\)\")"
+    ]
+  }
+}
